@@ -169,7 +169,10 @@ typedef enum error_return_codes
 	FILE_OPEN_ERROR = -299,			// -299
 	DBFILE_CORRUPTION,				// -298
 	MEMORY_ERROR,					// -297
-	INVALID_SELECT_SECTION
+	INVALID_SELECT_SECTION,			// -296
+	NULL_NOT_ALLOWED,				// -295
+	MAX_LENGTH_EXCEEDED,			// -294
+	INCOMPLETE_INSERT_STATEMENT
 } return_codes;
 
 /* Set of function prototypes */

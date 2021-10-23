@@ -527,7 +527,7 @@ int sem_create_table(token_list *t_list)
 									{
 										/* Enter char(n) processing */
 										cur = cur->next;
-										printf("col len parsing\n");
+										if(IS_DEBUG) printf("col len parsing\n");
 										if (cur->tok_value != INT_LITERAL)
 										{
 											rc = INVALID_COLUMN_LENGTH;
@@ -538,7 +538,7 @@ int sem_create_table(token_list *t_list)
 											/* Got a valid integer - convert */
 											col_entry[cur_id].col_len = atoi(cur->tok_string);
 											cur = cur->next;
-											printf("col len - %d\n", col_entry[cur_id].col_len);
+											if(IS_DEBUG) printf("col len - %d\n", col_entry[cur_id].col_len);
 											rowSize+=col_entry[cur_id].col_len;
 											if (cur->tok_value != S_RIGHT_PAREN)
 											{
@@ -639,7 +639,7 @@ int sem_create_table(token_list *t_list)
 						
 						//create tableName.tab file
 						table_file_header* tfh = (table_file_header*)calloc(1, sizeof(table_file_header));
-						printf("record size = %d+%d\n",rowSize, tab_entry.num_columns);
+						if(IS_DEBUG) printf("record size = %d+%d\n",rowSize, tab_entry.num_columns);
 						tfh->record_size = rowSize + tab_entry.num_columns;
 						tfh->num_records=0;
 						tfh->record_offset=sizeof(table_file_header);//no. of parameters in table_file_header
@@ -653,7 +653,7 @@ int sem_create_table(token_list *t_list)
 						}
 						else
 						{
-							printf("struct size - %d\n",sizeof(tfh));
+							if(IS_DEBUG) printf("struct size - %d\n",sizeof(tfh));
 							fwrite(tfh, sizeof(table_file_header), 1, fhandle);
 							fflush(fhandle);
 							fclose(fhandle);
@@ -928,7 +928,7 @@ int sem_insert_into(token_list *t_list)
 					char* tname=(char*)calloc(1, MAX_TOK_LEN);
 					memcpy(tname, tab_entry->table_name, MAX_TOK_LEN);
 					strcat(tname, ".tab");
-					printf("table name - %s\n",tname);
+					if(IS_DEBUG) printf("table name - %s\n",tname);
 					if((fhandle = fopen(tname, "rbc")) == NULL)
 					{
 						rc = FILE_OPEN_ERROR;
@@ -936,34 +936,34 @@ int sem_insert_into(token_list *t_list)
 					}
 					else
 					{
-						printf("sizeof(table_file_header) - %d\n", sizeof(table_file_header));
+						if(IS_DEBUG) printf("sizeof(table_file_header) - %d\n", sizeof(table_file_header));
 						struct stat file_stat;
 						fstat(fileno(fhandle), &file_stat);
-						printf("file size = %d\n", file_stat.st_size);
 						fread(tfh, sizeof(table_file_header), 1, fhandle);
+						if(IS_DEBUG) printf("file size = %d\nno. of records = %d\n", file_stat.st_size,tfh->num_records);
 						//fflush(fhandle);
 
 						char* filedata = (char*)calloc(1, file_stat.st_size);
 
 						fread(filedata, file_stat.st_size, 1, fhandle);
 						//fflush(fhandle);
-						printCharArrInInt(filedata, file_stat.st_size);
-						printf("\n in char format - ");
-						printCharArr(filedata, file_stat.st_size);
+						if(IS_DEBUG) printCharArrInInt(filedata, file_stat.st_size);
+						if(IS_DEBUG) printf("\n in char format - ");
+						if(IS_DEBUG) printCharArr(filedata, file_stat.st_size);
 						//fflush(fhandle);
 						fclose(fhandle);
-						printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
+						if(IS_DEBUG) printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
 						char pastRecords[tfh->num_records][tfh->record_size];
 						char rowdata[tfh->record_size];
 						int offset=0;
 						
 						
 						for(int i=0;i<tfh->num_records;i++){
-							printf("record size - %d\n", tfh->record_size);
+							if(IS_DEBUG) printf("record size - %d\n", tfh->record_size);
 							//fread(pastRecords[i], tfh->record_size, 1, fhandle);
 							memcpy(pastRecords[i], filedata+i*tfh->record_size, tfh->record_size);
-							printCharArrInInt(pastRecords[i], tfh->record_size);
-							printf("\n");
+							if(IS_DEBUG) printCharArrInInt(pastRecords[i], tfh->record_size);
+							if(IS_DEBUG) printf("\n");
 						}
 						
 						
@@ -971,37 +971,53 @@ int sem_insert_into(token_list *t_list)
 						cur = cur->next;
 						col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 						for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
-							printf("Column Name   (col_name) = %s\n", col_entry->col_name);
-							printf("Column Id     (col_id)   = %d\n", col_entry->col_id);
-							printf("Column Type   (col_type) = %d\n", col_entry->col_type);
-							printf("Column Length (col_len)  = %d\n", col_entry->col_len);
-							printf("Not Null flag (not_null) = %d\n\n", col_entry->not_null);
+							if(IS_DEBUG) printf("Column Name   (col_name) = %s\n", col_entry->col_name);
+							if(IS_DEBUG) printf("Column Id     (col_id)   = %d\n", col_entry->col_id);
+							if(IS_DEBUG) printf("Column Type   (col_type) = %d\n", col_entry->col_type);
+							if(IS_DEBUG) printf("Column Length (col_len)  = %d\n", col_entry->col_len);
+							if(IS_DEBUG) printf("Not Null flag (not_null) = %d\n\n", col_entry->not_null);
 							//strcpy(tab_entry->table_name, cur->tok_string);
-							printf("reading - '%s'\noffset - %d\n", cur->tok_string, offset);
-							if(cur->tok_value==K_NULL)
+							if(IS_DEBUG) printf("reading - '%s'\noffset - %d\n", cur->tok_string, offset);
+							
+							
+							if(cur->tok_value==K_NULL){
 								*(rowdata + offset)=0;
+								if(col_entry->not_null){
+									rc = NULL_NOT_ALLOWED;
+									cur->tok_value = INVALID;
+									return rc;
+								}
+							}
 							else
 								*(rowdata + offset)=col_entry->col_len;
 							offset++;
+							
+							if(strlen(cur->tok_string)>col_entry->col_len){
+								rc = MAX_LENGTH_EXCEEDED;
+								cur->tok_value = INVALID;
+								return rc;
+							}
+							
 							if(col_entry->col_type==T_INT){
 								if (cur->tok_value != INT_LITERAL && cur->tok_value!=K_NULL)
 								{
 									rc = INVALID_INSERT_STATEMENT;
 									cur->tok_value = INVALID;
+									return rc;
 								}
 								else
 								{
-									printf("check int1 - %d\n",cur->tok_string[0]);
+									if(IS_DEBUG) printf("check int1 - %d\n",cur->tok_string[0]);
 									if(cur->tok_value!=K_NULL){
 										*(rowdata + offset + 0)=cur->tok_string[0];
-										printf("check int1 - %c\n",*(rowdata + offset + 0));
+										if(IS_DEBUG) printf("check int1 - %c\n",*(rowdata + offset + 0));
 										*(rowdata + offset + 1)=cur->tok_string[1];
 										*(rowdata + offset + 2)=cur->tok_string[2];
 										*(rowdata + offset + 3)=cur->tok_string[3];
 									}
 									//printCharArr(cur->tok_string, col_entry->col_len);
 									//copyBytes((rowdata + offset), cur->tok_string, col_entry->col_len);
-									printf("check int2\n");
+									if(IS_DEBUG) printf("check int2\n");
 									offset+=col_entry->col_len;
 									//rowdata[i].data=cur->tok_string;
 								}
@@ -1012,6 +1028,7 @@ int sem_insert_into(token_list *t_list)
 									//Error
 									rc = INVALID_TABLE_DEFINITION;
 									cur->tok_value = INVALID;
+									return rc;
 								}
 								else
 								{
@@ -1022,48 +1039,59 @@ int sem_insert_into(token_list *t_list)
 							}
 							
 							cur = cur->next;
-							printf("%d\n", cur->tok_value);
+							if(IS_DEBUG) printf("%d\n", cur->tok_value);
 							if (cur->tok_value != S_COMMA )
 							{
 								if(cur->tok_value == S_RIGHT_PAREN){
-									break;
+									if(IS_DEBUG) printf("closing%d, %d\n", i, tab_entry->num_columns-1);
+									if(i == tab_entry->num_columns-1)
+										break;
+									else{
+										rc=INCOMPLETE_INSERT_STATEMENT;
+										cur->tok_value = INVALID;
+										return rc;
+									}
 								}
 								rc = INVALID_INSERT_STATEMENT;
 								cur->tok_value = INVALID;
-								break;
+								return rc;
 							}
 							cur = cur->next;
 						}
-						printf("new row parsed\n");
-						printf("new row - ");
-						printCharArrInInt(rowdata, tfh->record_size);
+						if(IS_DEBUG) printf("new row parsed\n");
+						if(IS_DEBUG) printf("new row - ");
+						if(IS_DEBUG) printCharArrInInt(rowdata, tfh->record_size);
 						if(cur->tok_value != S_RIGHT_PAREN){
 							rc = INVALID_INSERT_STATEMENT;
 							cur->tok_value = INVALID;
+							return rc;
+						}
+						else if(rc!=0){
+							
 						}
 						else{
 							fhandle = NULL;
 							if((fhandle = fopen(tname, "w")) == NULL)
 							{
 								rc = FILE_OPEN_ERROR;
-								printf("file open issue");
+								if(IS_DEBUG) printf("file open issue");
 							}
 							else
 							{
-								printf("\nwriting to file. past data -\n");
+								if(IS_DEBUG) printf("\nwriting to file. past data -\n");
 								
-								//printf("current file size-%d\n",file_stat.st_size);
+								//if(IS_DEBUG) printf("current file size-%d\n",file_stat.st_size);
 								tfh->num_records++;
-								//printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
+								//if(IS_DEBUG) printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
 								fwrite(tfh, sizeof(table_file_header), 1, fhandle);
 								fflush(fhandle);
 								for(int i=0;i<tfh->num_records-1;i++){
 									fwrite(pastRecords[i], tfh->record_size, 1, fhandle);
 									fflush(fhandle);
-									printCharArrInInt(pastRecords[i], tfh->record_size);
-									printf("\n");
+									if(IS_DEBUG) printCharArrInInt(pastRecords[i], tfh->record_size);
+									if(IS_DEBUG) printf("\n");
 								}
-								printf("\n------------------------------\n");
+								if(IS_DEBUG) printf("\n------------------------------\n");
 								fwrite(rowdata, sizeof(rowdata), 1, fhandle);
 								fflush(fhandle);
 								fclose(fhandle);
@@ -1116,11 +1144,11 @@ int sem_select(token_list *t_list)
 				char* tname=(char*)calloc(1, MAX_TOK_LEN);
 				memcpy(tname, tab_entry->table_name, MAX_TOK_LEN);
 				strcat(tname, ".tab");
-				printf("table name - %s\n",tname);
+				if(IS_DEBUG) printf("table name - %s\n",tname);
 				if((fhandle = fopen(tname, "rbc")) == NULL)
 				{
 					rc = FILE_OPEN_ERROR;
-					printf("file open issue");
+					if(IS_DEBUG) printf("file open issue");
 				}
 				else
 				{
@@ -1150,16 +1178,27 @@ int sem_select(token_list *t_list)
 					fflush(fhandle);
 					fclose(fhandle);
 					col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+					printf("\t");
 					for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
-						printf("%20.20s\t", col_entry->col_name);
-						//printf("Column Id     (col_id)   = %d\n", col_entry->col_id);
-						//printf("Column Type   (col_type) = %d\n", col_entry->col_type);
-						//printf("Column Length (col_len)  = %d\n", col_entry->col_len);
-						//printf("Not Null flag (not_null) = %d\n\n", col_entry->not_null);
-						//strcpy(tab_entry->table_name, cur->tok_string);
-						//printf("reading - '%s'\noffset - %d\n", cur->tok_string, offset);
+						if(col_entry->col_len>strlen(col_entry->col_name)){
+							printf("%s", col_entry->col_name);
+							printf("% *s ", col_entry->col_len-strlen(col_entry->col_name),"");
+						}else{
+							printf("%s ", col_entry->col_name);
+						}
+						//printf("(%d,%d)",col_entry->col_len,strlen(col_entry->col_name));
 					}
-					printf("\n");
+					printf("\n\t");
+					col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+					const char *pad = "---------------------------------------";
+					for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
+						int len=col_entry->col_len;
+						if(strlen(col_entry->col_name)>len)
+							printf("%.*s ", strlen(col_entry->col_name), pad);
+						else
+							printf("%.*s ", len, pad);
+					}
+					printf("\n\t");
 					int cellLen=0;
 					int lenTillNow=0;
 					for(int i=0;i<tfh->num_records;i++){
@@ -1169,18 +1208,29 @@ int sem_select(token_list *t_list)
 							cellLen = records[i][lenTillNow];
 							lenTillNow++;
 							if(cellLen==0)
-								printf("%20.20s\t", "------");
+								printf("% *s", "---");
 							else{
 								char* cell = (char*)calloc(1, cellLen);
 								//memcpy(cell, records[i][lenTillNow], cellLen);
 								for(int k=0;k<cellLen;k++){
 									*(cell+k)=records[i][lenTillNow+k];
 								}
-								printf("%20.20s\t", cell);
+								if(col_entry->col_type==T_CHAR)
+									if(strlen(col_entry->col_name)>col_entry->col_len)
+										printf("% *s%s ", strlen(col_entry->col_name)-strlen(cell), "", cell);
+									else
+										printf("%s% *s ", cell, col_entry->col_len-strlen(cell),"");
+										
+								else{
+									if(strlen(col_entry->col_name)>col_entry->col_len)
+										printf("% *s%s ", strlen(col_entry->col_name)-strlen(cell), "", cell);
+									else
+										printf("% *s%s ", 4-strlen(cell), "", cell);
+								}
 							}
 							lenTillNow+=cellLen;
 						}
-						printf("\n");
+						printf("\n\t");
 					}
 					
 				}
@@ -1210,7 +1260,7 @@ void copyBytes(char* from, char to[], int noOfBytes){
 		//printf("copying - %d - %d\n",*(from+i), to[i]);
 		*(from+i)=to[i];
 	}
-	printf("copy - %s\n",from);
+	if(IS_DEBUG) printf("copy - %s\n",from);
 }
 
 

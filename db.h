@@ -175,29 +175,76 @@ typedef enum error_return_codes
 	INCOMPLETE_INSERT_STATEMENT
 } return_codes;
 
+typedef enum condition_type_def
+{
+  IS_NOT_NULL = 400,		//400
+  IS_NULL,					//402 
+  EQUALS,					//403 
+  NOT_EQUALS,				//404
+  GREATER_THAN,				//405 
+  LESS_THAN,				//406 
+  INVALID_CONDITION			//407
+} condition_type;
+
+typedef enum aggregate_type_def
+{
+  NONE = 500,		//500
+  AVG,				//500
+  SUM,				//501
+  COUNT,			//502
+} aggregate_type;
+
+
+struct condition{
+	int colNo;
+	condition_type type;
+	int keywordLen;
+	int nextBinaryOperator;
+	char data[32];
+};
+
+struct select_attribute{
+	char columnName[32];
+	aggregate_type functionType;
+	int columnIndex;
+	int columnOffset;
+};
+
 /* Set of function prototypes */
-int get_token(char *command, token_list **tok_list);
-void add_to_list(token_list **tok_list, const char *tmp, int t_class, int t_value);
-int do_semantic(token_list *tok_list);
-int sem_create_table(token_list *t_list);
-int sem_drop_table(token_list *t_list);
-int sem_list_tables();
-int sem_list_schema(token_list *t_list);
-void printCharArrInInt(char arr[], int size);
+int 				get_token(char *command, token_list **tok_list);
+void 				add_to_list(token_list **tok_list, const char *tmp, int t_class, int t_value);
+int 				do_semantic(token_list *tok_list);
+int 				sem_create_table(token_list *t_list);
+int 				sem_drop_table(token_list *t_list);
+int 				sem_list_tables();
+int 				sem_list_schema(token_list *t_list);
+void 				printCharArrInInt(char arr[], int size);
+bool* 				filterRows(char** records, tpd_entry *tab_entry, condition* conditionList, int conditionCount, int rowCount, int rowLen);
+int 				parseWhereClause(token_list* cur, tpd_entry* tab_entry, condition* conditionList);
+condition* 			parseCondition(token_list *t_list, int colType);
+int 				getRowOffset(tpd_entry *tab_entry, int colNo);
+int 				bin2int(char* num);
+char* 				toLower(char* s);
+int 				stringToInt(char arr[]);
+int 				getColumnList(token_list* cur, select_attribute** columnList);
+int				 	filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters);
+int 				checkAggregate(aggregate_type aggType, token_list* cur, select_attribute* attr);
 
 /*
 	Keep a global list of tpd - in real life, this will be stored
 	in shared memory.  Build a set of functions/methods around this.
 */
 tpd_list	*g_tpd_list;
-int initialize_tpd_list();
-int add_tpd_to_list(tpd_entry *tpd);
-int drop_tpd_from_list(char *tabname);
-tpd_entry* get_tpd_from_list(char *tabname);
-int sem_insert_into(token_list *t_list);
-void printCharArr(char arr[], int size);
-void copyBytes(char* from, char to[], int noOfBytes);
-int sem_select(token_list *t_list);
+
+int 				initialize_tpd_list();
+int 				add_tpd_to_list(tpd_entry *tpd);
+int 				drop_tpd_from_list(char *tabname);
+tpd_entry* 			get_tpd_from_list(char *tabname);
+int 				sem_insert_into(token_list *t_list);
+void 				printCharArr(char arr[], int size);
+void 				copyBytes(char* from, char to[], int noOfBytes);
+int 				sem_select(token_list *t_list);
+
 
 typedef struct table_file_header_def
 {
@@ -208,33 +255,6 @@ typedef struct table_file_header_def
 	int			file_header_flag;		// 4 bytes
 	tpd_entry		*tpd_ptr;			// 4 bytes
 } table_file_header;
-
-typedef struct row_item_def
-{
-	int			file_size;			// 4 bytes
-	int			record_size;			// 4 bytes
-} row_item;
-
-typedef struct cell_item_def
-{
-	int			cell_size;			// 4 bytes
-	char		data[MAX_TOK_LEN];				// 4 bytes
-} cell_item;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

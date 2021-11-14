@@ -2,6 +2,9 @@
 db.h - This file contains all the structures, defines, and function
 	prototype for the db.exe program.
 *********************************************************************/
+#pragma once
+#include <string.h>
+#include <stdio.h>
 
 #define MAX_IDENT_LEN   16
 #define MAX_NUM_COL			16
@@ -218,6 +221,7 @@ int 				sem_create_table(token_list *t_list);
 int 				sem_drop_table(token_list *t_list);
 int 				sem_list_tables();
 int 				sem_list_schema(token_list *t_list);
+int 				sem_delete_from(token_list *t_list);
 void 				printCharArrInInt(char arr[], int size);
 bool* 				filterRows(char** records, tpd_entry *tab_entry, condition* conditionList, int conditionCount, int rowCount, int rowLen);
 int 				parseWhereClause(token_list* cur, tpd_entry* tab_entry, condition* conditionList);
@@ -256,5 +260,16 @@ typedef struct table_file_header_def
 	tpd_entry		*tpd_ptr;			// 4 bytes
 } table_file_header;
 
-
+struct row_obj{
+	char* rowData;
+	int offset;
+	int dataType;
+	bool lessThan(row_obj& other){
+		if(dataType==T_INT){
+			return bin2int(rowData+offset+1) < bin2int(other.rowData+other.offset+1);
+		}else{
+			return strcmp(rowData+offset+1,other.rowData+other.offset+1)<0;
+		}
+	}
+};
 

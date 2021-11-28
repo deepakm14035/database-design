@@ -131,7 +131,7 @@ const char *keyword_table[] =
 {
   "int", "char", "varchar", "create", "table", "not", "null", "drop", "list", "schema",
   "for", "to", "insert", "into", "values", "delete", "from", "where", 
-  "update", "set", "select", "order", "by", "desc", "is", "and", "or", "values",
+  "update", "set", "select", "order", "by", "desc", "is", "and", "or", 
   "sum", "avg", "count"
 };
 
@@ -175,7 +175,10 @@ typedef enum error_return_codes
 	INVALID_SELECT_SECTION,			// -296
 	NULL_NOT_ALLOWED,				// -295
 	MAX_LENGTH_EXCEEDED,			// -294
-	INCOMPLETE_INSERT_STATEMENT
+	INCOMPLETE_INSERT_STATEMENT,	// -293
+	INVALID_UPDATE_STATEMENT,		// -292
+	DATA_TYPE_MISMATCH				// -291
+
 } return_codes;
 
 typedef enum condition_type_def
@@ -192,9 +195,9 @@ typedef enum condition_type_def
 typedef enum aggregate_type_def
 {
   NONE = 500,		//500
-  AVG,				//500
-  SUM,				//501
-  COUNT,			//502
+  AVG,				//501
+  SUM,				//502
+  COUNT,			//503
 } aggregate_type;
 
 
@@ -211,6 +214,13 @@ struct select_attribute{
 	aggregate_type functionType;
 	int columnIndex;
 	int columnOffset;
+};
+
+struct update_operation{
+	char* columnName;
+	char* newValue;
+	int columnIndex;
+	int columnType;
 };
 
 /* Set of function prototypes */
@@ -233,7 +243,8 @@ int 				stringToInt(char arr[]);
 int 				getColumnList(token_list* cur, select_attribute** columnList);
 int				 	filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters);
 int 				checkAggregate(aggregate_type aggType, token_list* cur, select_attribute* attr);
-
+int 				parseSetClause(token_list* cur, tpd_entry* tab_entry, update_operation** columnListToUpdate);
+int 				sem_update(token_list *t_list);
 /*
 	Keep a global list of tpd - in real life, this will be stored
 	in shared memory.  Build a set of functions/methods around this.
@@ -264,6 +275,7 @@ struct row_obj{
 	char* rowData;
 	int offset;
 	int dataType;
+	bool shouldPrint=true;
 	bool lessThan(row_obj& other){
 		if(dataType==T_INT){
 			return bin2int(rowData+offset+1) < bin2int(other.rowData+other.offset+1);
@@ -272,4 +284,3 @@ struct row_obj{
 		}
 	}
 };
-

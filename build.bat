@@ -1,12 +1,16 @@
-
 CALL gcc db.cpp
-
-CALL a "drop table emp4"
-CALL a "create table emp4 (name char(30), age int)"
-
-CALL a "insert into emp4 values ('abcde',22)"
-CALL a "insert into emp4 values ('fghij',23)"
-CALL a "insert into emp4 values ('klmno',24)"
-CALL a "insert into emp4 values ('pqrst',25)"
-CALL a "insert into emp4 values ('kapeed4',26)"
-PAUSE
+CALL a "drop table class"
+rem #01 Test setup - create table + insert data
+CALL a "create table class ( Student char(12) NOT NULL, Gender char(1), Exams int, Quiz int, Total int )"
+rem ------------------------------------------------------------------------------------------
+rem #02 Insert 10 rows of good data
+CALL a "insert into class values ('Siu', 'M', 480, 80, 560)"
+CALL a "insert into class values ('Frank', 'M', 600, 100, 700)"
+CALL a "insert into class values ('Jordon', 'M', 450, 75, 525)"
+CALL a "insert into class values ('Jeff', 'M', 455, 60, 515)"
+CALL a "insert into class values ('Ying', 'F', 540, 85, 625)"
+CALL a "insert into class values ('David', 'M', 550, 83, 633)"
+CALL a "insert into class values ('euna', 'F', 460, 75, 535)"
+CALL a "insert into class values ('Victor', 'M', 475, 60, 535)"
+CALL a "insert into class values ('Linawati', 'F', 490, 86, 576)"
+CALL a "insert into class values ('Stephen', 'M', 520, 76, 596)"

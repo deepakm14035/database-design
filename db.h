@@ -88,42 +88,45 @@ typedef enum t_value
 	K_DROP,				// 17
 	K_LIST,				// 18
 	K_SCHEMA,			// 19
-  K_FOR,        // 20
+	K_FOR,        // 20
 	K_TO,				  // 21
-  K_INSERT,     // 22
-  K_INTO,       // 23
-  K_VALUES,     // 24
-  K_DELETE,     // 25
-  K_FROM,       // 26
-  K_WHERE,      // 27
-  K_UPDATE,     // 28
-  K_SET,        // 29
-  K_SELECT,     // 30
-  K_ORDER,      // 31
-  K_BY,         // 32
-  K_DESC,       // 33
-  K_IS,         // 34
-  K_AND,        // 35
-  K_OR,         // 36 - new keyword should be added below this line
-  F_SUM,        // 37
-  F_AVG,        // 38
-	F_COUNT,      // 39 - new function name should be added below this line
+	K_INSERT,     // 22
+	K_INTO,       // 23
+	K_VALUES,     // 24
+	K_DELETE,     // 25
+	K_FROM,       // 26
+	K_WHERE,      // 27
+	K_UPDATE,     // 28
+	K_SET,        // 29
+	K_SELECT,     // 30
+	K_ORDER,      // 31
+	K_GROUP,	  // 32
+	K_BY,         // 33
+	K_DESC,       // 34
+	K_IS,         // 35
+	K_AND,        // 36
+	K_NATURAL,    // 37
+	K_JOIN,       // 38
+	K_OR,         // 39 - new keyword should be added below this line
+	F_SUM,        // 40
+	F_AVG,        // 41
+	F_COUNT,      // 42 - new function name should be added below this line
 	S_LEFT_PAREN = 70,  // 70
 	S_RIGHT_PAREN,		  // 71
 	S_COMMA,			      // 72
-  S_STAR,             // 73
-  S_EQUAL,            // 74
-  S_LESS,             // 75
-  S_GREATER,          // 76
+	S_STAR,             // 73
+	S_EQUAL,            // 74
+	S_LESS,             // 75
+	S_GREATER,          // 76
 	IDENT = 85,			    // 85
 	INT_LITERAL = 90,	  // 90
-  STRING_LITERAL,     // 91
+	STRING_LITERAL,     // 91
 	EOC = 95,			      // 95
 	INVALID = 99		    // 99
 } token_value;
 
 /* This constants must be updated when add new keywords */
-#define TOTAL_KEYWORDS_PLUS_TYPE_NAMES 30
+#define TOTAL_KEYWORDS_PLUS_TYPE_NAMES 32
 
 /* New keyword must be added in the same position/order as the enum
    definition above, otherwise the lookup will be wrong */
@@ -131,7 +134,7 @@ const char *keyword_table[] =
 {
   "int", "char", "varchar", "create", "table", "not", "null", "drop", "list", "schema",
   "for", "to", "insert", "into", "values", "delete", "from", "where", 
-  "update", "set", "select", "order", "by", "desc", "is", "and", "or", 
+  "update", "set", "select", "order", "group", "by", "desc", "is", "and", "natural", "join", "or", 
   "sum", "avg", "count"
 };
 
@@ -177,9 +180,21 @@ typedef enum error_return_codes
 	MAX_LENGTH_EXCEEDED,			// -294
 	INCOMPLETE_INSERT_STATEMENT,	// -293
 	INVALID_UPDATE_STATEMENT,		// -292
-	DATA_TYPE_MISMATCH				// -291
+	DATA_TYPE_MISMATCH,				// -291
+	INVALID_AGGREGATE_FUNCTION,		// -290
+	NO_MATCHING_COLUMNS				// -289
 
 } return_codes;
+
+typedef struct table_file_header_def
+{
+	int			file_size;			// 4 bytes
+	int			record_size;			// 4 bytes
+	int			num_records;			// 4 bytes
+	int			record_offset;			// 4 bytes
+	int			file_header_flag;		// 4 bytes
+	tpd_entry		*tpd_ptr;			// 4 bytes
+} table_file_header;
 
 typedef enum condition_type_def
 {
@@ -211,9 +226,13 @@ struct condition{
 
 struct select_attribute{
 	char columnName[32];
+	char tableName[32];
+	char* concatenatedName;//containing aggregate function
 	aggregate_type functionType;
 	int columnIndex;
 	int columnOffset;
+	int columnLength;
+	select_attribute** arr;
 };
 
 struct update_operation{
@@ -241,10 +260,17 @@ int 				bin2int(char* num);
 char* 				toLower(char* s);
 int 				stringToInt(char arr[]);
 int 				getColumnList(token_list* cur, select_attribute** columnList);
-int				 	filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters);
+int				 	filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry);
 int 				checkAggregate(aggregate_type aggType, token_list* cur, select_attribute* attr);
 int 				parseSetClause(token_list* cur, tpd_entry* tab_entry, update_operation** columnListToUpdate);
 int 				sem_update(token_list *t_list);
+int 				filterColumns_bk(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters);
+void 				printDashes(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect);
+void 				printColumnList(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect);
+void 				printCells(select_attribute** columnsInSelect, int columnCountInSelect, int rowNo, tpd_entry* tab_entry, char** records);
+void 				printRowData(select_attribute** columnsInSelect, int columnCountInSelect, int rowCount, tpd_entry* tab_entry, bool* rowsToPrint, char** records);
+char** 				getTableData(tpd_entry* tab_entry, table_file_header* tfh);
+int 				getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1, char** records2, table_file_header* tfh1, table_file_header* tfh2, select_attribute** columnsInSelect, int columnCount, char** outputRows);
 /*
 	Keep a global list of tpd - in real life, this will be stored
 	in shared memory.  Build a set of functions/methods around this.
@@ -259,17 +285,10 @@ int 				sem_insert_into(token_list *t_list);
 void 				printCharArr(char arr[], int size);
 void 				copyBytes(char* from, char to[], int noOfBytes);
 int 				sem_select(token_list *t_list);
+int 				columnExists(char* name, tpd_entry* tab_entry);
+int 				getRowLen(select_attribute** columnList, int colLen);
+void 				copyIntToCharArray(char* arr, int val);
 
-
-typedef struct table_file_header_def
-{
-	int			file_size;			// 4 bytes
-	int			record_size;			// 4 bytes
-	int			num_records;			// 4 bytes
-	int			record_offset;			// 4 bytes
-	int			file_header_flag;		// 4 bytes
-	tpd_entry		*tpd_ptr;			// 4 bytes
-} table_file_header;
 
 struct row_obj{
 	char* rowData;
@@ -281,6 +300,13 @@ struct row_obj{
 			return bin2int(rowData+offset+1) < bin2int(other.rowData+other.offset+1);
 		}else{
 			return strcmp(rowData+offset+1,other.rowData+other.offset+1)<0;
+		}
+	}
+	bool equals(row_obj& other){
+		if(dataType==T_INT){
+			return bin2int(rowData+offset+1) == bin2int(other.rowData+other.offset+1);
+		}else{
+			return strcmp(rowData+offset+1,other.rowData+other.offset+1)==0;
 		}
 	}
 };

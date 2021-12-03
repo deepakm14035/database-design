@@ -1139,12 +1139,12 @@ int sem_select(token_list *t_list)
 	int cur_id = 0;
 	cd_entry  *col_entry = NULL;
 	select_attribute** columnsInSelect = NULL;
-	select_attribute** columnListToPrint = NULL;
+	//select_attribute** columnListToPrint = NULL;
 	int columnCountInSelect=0;
 	cur = t_list;
 	columnsInSelect = (select_attribute**)calloc(100,sizeof(select_attribute*));
 	columnCountInSelect = getColumnList(cur, columnsInSelect); 
-	//printf("[sem_select] columnCountInSelect - %d\n", columnCountInSelect);
+	printf("[sem_select] columnCountInSelect - %d\n", columnCountInSelect);
 	if(columnCountInSelect<0){
 		rc = columnCountInSelect;
 	}
@@ -1159,6 +1159,7 @@ int sem_select(token_list *t_list)
 		}
 		else
 		{
+			printf("[sem_select] reading tpd file\n");
 			cur = cur->next;
 			if ((tab_entry = get_tpd_from_list(cur->tok_string)) == NULL)
 			{
@@ -1167,241 +1168,509 @@ int sem_select(token_list *t_list)
 			}
 			else
 			{
-				FILE *fhandle = NULL;
-				table_file_header* tfh = (table_file_header*)calloc(1, sizeof(table_file_header));
-				char* tname=(char*)calloc(1, MAX_TOK_LEN);
-				memcpy(tname, tab_entry->table_name, MAX_TOK_LEN);
-				strcat(tname, ".tab");
 
-				columnListToPrint = (select_attribute**)calloc(100, sizeof(select_attribute*));
-				int columnCount = filterColumns(columnsInSelect,columnCountInSelect,tab_entry, columnListToPrint);
-				//printf("[sem_select] columnCount - %d\n", columnCount);
+				//columnListToPrint = (select_attribute**)calloc(100, sizeof(select_attribute*));
+				//int columnCount = filterColumns(columnsInSelect,columnCountInSelect,tab_entry, columnListToPrint);
+				int columnObjUpdated = filterColumns(columnsInSelect,columnCountInSelect,tab_entry);
+				printf("[sem_select] columnCount - %d\n", columnObjUpdated);
 				
-				if(columnCount<0){
-					rc = INVALID_SYNTAX;
+				if(columnObjUpdated<0){
+					rc = columnObjUpdated;
+					cur->tok_value = INVALID;
 				}
 				else{
-					if((fhandle = fopen(tname, "rbc")) == NULL)
-					{
-						rc = FILE_OPEN_ERROR;
-						if(IS_DEBUG) printf("file open issue");
+					table_file_header* tfh = (table_file_header*)calloc(1, sizeof(table_file_header));
+					char** records=getTableData(tab_entry, tfh);
+					if(records==NULL){
+						cur->tok_value = INVALID;
+						return FILE_OPEN_ERROR;
 					}
-					else
+					char rowdata[tfh->record_size];
+					bool* rowsToPrint=NULL;
+					int offset=0;
+					int* groupNos=NULL;
+					row_obj** rows = NULL;
+					int rowCount=0;
+					char** updatedRows = NULL;
+
+					cur = cur->next;
+					if(cur->tok_value == K_WHERE)
 					{
-						struct stat file_stat;
-						fread(tfh, sizeof(table_file_header), 1, fhandle);
-						fstat(fileno(fhandle), &file_stat);
-						char* filedata = (char*)calloc(1, file_stat.st_size);
-
-						if(IS_DEBUG) printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
-
-						fread(filedata, file_stat.st_size, 1, fhandle);
-
-						fclose(fhandle);
-
-						char** records=(char**) calloc(tfh->num_records, sizeof(char*));;
-						char rowdata[tfh->record_size];
-						bool* rowsToPrint=NULL;
-						int offset=0;
-
-						for (int i = 0; i < tfh->num_records; i++ ){
-							records[i] = (char*) calloc(tfh->record_size, sizeof(char));
-						}
-						
-						
-						for(int i=0;i<tfh->num_records;i++){
-							if(IS_DEBUG) printf("[sem_select] record size - %d\n", tfh->record_size);
-							memcpy(records[i], filedata+i*tfh->record_size, tfh->record_size);
-						}
-						fflush(fhandle);
-						fclose(fhandle);
-						
 						cur = cur->next;
-						if(cur->tok_value == K_WHERE)
-						{
-							cur = cur->next;
-							condition* conditionList = (condition*)calloc(1, 100);
-							int conditionCount = parseWhereClause(cur, tab_entry, conditionList);
-							if(conditionCount<0){
-								rc = conditionCount;
+						condition* conditionList = (condition*)calloc(1, 100);
+						int conditionCount = parseWhereClause(cur, tab_entry, conditionList);
+						if(conditionCount<0){
+							rc = conditionCount;
+							return rc;
+						}
+
+						//check for aggregate functions
+
+						rowsToPrint=filterRows(records, tab_entry, conditionList, conditionCount, tfh->num_records, tfh->record_size);
+						//printf("%s\n", cur->tok_string);
+						while(cur->tok_value !=  K_ORDER && cur->tok_value !=  EOC){
+							//printf("%s\n", cur->tok_string);
+							cur=cur->next;
+						}
+					}
+					printf("checkpt\n");
+
+					if(cur->tok_value == K_NATURAL){
+						cur=cur->next;
+						if(cur->tok_value == K_JOIN){
+							cur=cur->next;
+							tpd_entry* tab_entry_new_table = get_tpd_from_list(cur->tok_string);
+							table_file_header* tfh_new=(table_file_header*)calloc(1, sizeof(table_file_header));
+							if(tab_entry_new_table!=NULL){
+								char** newRowData=getTableData(tab_entry_new_table,tfh_new);
+								printf("table file read finished\n");
+								//int** commonIndices=(int**)calloc(10,sizeof(int*));
+								if(newRowData!=NULL){
+									printf("table file read success\n");
+									updatedRows=(char**)calloc(tfh->num_records*tfh_new->num_records,sizeof(char*));
+									int columnObjUpdated = filterColumns(columnsInSelect,columnCountInSelect,tab_entry_new_table);
+									rowCount=getJoinedData(tab_entry, tab_entry_new_table, records,newRowData, tfh, tfh_new, columnsInSelect, columnCountInSelect, updatedRows);
+									printf("new rows-%d\n", rowCount);
+									if(rowCount>0){
+
+									}else{
+
+									}
+								}else{
+									rc=FILE_OPEN_ERROR;
+									cur->tok_value = INVALID;
+									return rc;									
+								}
+							}
+							cur=cur->next;
+						}else{
+							rc=INVALID_SYNTAX;
+							cur->tok_value = INVALID;
+							return rc;
+						}
+					}
+
+					if(cur->tok_value == K_GROUP){
+						cur=cur->next;
+						if(cur->tok_value == K_BY){
+							cur=cur->next;
+							col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+							int columnOffset=0;
+							int colType=0;
+							int columnIndex = columnExists(cur->tok_string,tab_entry);
+							if(columnIndex<0){
+								rc=COLUMN_NOT_EXIST;
+								cur->tok_value = INVALID;
 								return rc;
 							}
+							columnOffset=getRowOffset(tab_entry,columnIndex);
 
-							//check for aggregate functions
-
-							rowsToPrint=filterRows(records, tab_entry, conditionList, conditionCount, tfh->num_records, tfh->record_size);
-							//printf("%s\n", cur->tok_string);
-							while(cur->tok_value !=  K_ORDER && cur->tok_value !=  EOC){
-								//printf("%s\n", cur->tok_string);
-								cur=cur->next;
+							rows = (row_obj**)calloc(tfh->num_records,sizeof(row_obj*));
+							for(int i=0;i<tfh->num_records;i++){
+								rows[i] =  (row_obj*)calloc(1,sizeof(row_obj));
+								rows[i]->rowData=records[i];
+								rows[i]->offset=columnOffset;
+								rows[i]->dataType=colType;
+								//printf("creating row obj - %d\n",i);
+								if(rowsToPrint!=NULL)
+									rows[i]->shouldPrint=rowsToPrint[i];
 							}
-						}
-						if(cur->tok_value == K_ORDER){
-							cur=cur->next;
-							if(cur->tok_value == K_BY){
-								cur=cur->next;
-								col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
-								bool columnExists=false;
-								int columnOffset=0;
-								int colType=0;
-								//printf("before search\n");
-								for(int i = 0; i < columnCount; i++, col_entry++){
-									if(strcmp(toLower(cur->tok_string), toLower(col_entry->col_name))==0){
-									//printf("found column\n");
-										columnOffset=getRowOffset(tab_entry,i);
-										columnExists=true;
-										colType=col_entry->col_type;
-										break;
+							std::sort(rows, rows+tfh->num_records, [](row_obj* a, row_obj* b)-> bool {
+								return a->lessThan(*b);
+							});
+							int groupNo=0;
+							groupNos=(int*)calloc(tfh->num_records,sizeof(int));
+							for(int i=0;i<tfh->num_records;i++){
+								records[i] = rows[i]->rowData;
+								if(rowsToPrint!=NULL) rowsToPrint[i] = rows[i]->shouldPrint;
+								//printf("group no - %d\n",groupNo);
+								//printCharArrInInt(records[i], tfh->record_size);
+								if(i>0){
+									if(!rows[i]->equals(*(rows[i-1])))
+										groupNo++;
+								}
+								groupNos[i]=groupNo;
+							}
+							rowCount=groupNo+1;
+							updatedRows = (char**)calloc(rowCount,sizeof(char*));
+							printf("creating pointer-%d\n", rowCount);
+							//int newRowLen = getRowLen(columnsInSelect, columnCount);
+							int newRowLen = columnCountInSelect + columnCountInSelect*32;//getRowLen(columnsInSelect, columnCount);
+							//SELECT COUNT(CustomerID) FROM Customers GROUP BY Country;
+							//SELECT COUNT(CustomerID), Country FROM Customers GROUP BY Country;
+							int offset=0;
+							groupNo=0;
+							for(int i=0;i<rowCount;i++){
+								updatedRows[i]=(char*)calloc(newRowLen,sizeof(char));
+								printf("creating memory-%d, i %d\n", newRowLen, i);
+							}
+							for(int i=0;i<columnCountInSelect;i++){
+								printf("column no. -%d, offset-%d\n", i, columnsInSelect[i]->columnOffset);
+								columnsInSelect[i]->columnLength=32;
+								columnsInSelect[i]->columnOffset=offset;
+								offset++;
+								//printf("getting offset - %d\n",offset);
+								if(columnsInSelect[i]->functionType!=NONE){
+									//printf("[sem_select]func type - %d %d\n", columnsInSelect[i]->functionType, AVG);
+									groupNo=0;
+									for(int rowNo=0;rowNo<tfh->num_records;rowNo++){
+										int cellOffset = getRowOffset(tab_entry,columnsInSelect[i]->columnIndex);
+										int sum=bin2int(records[rowNo]+cellOffset+1);
+										int avgCount=1;
+										int j;
+										printf("aggregate rowNo-%d, sum - %d\n", rowNo, sum);
+										for(j=rowNo+1;j<tfh->num_records && groupNos[j]==groupNo;j++){
+											printf("sum-%d\n", bin2int(records[j]+cellOffset+1));
+											int cellLen = *(records[j]+cellOffset);
+											if(cellLen==0||(rowsToPrint!=NULL && !rowsToPrint[j])) continue;
+											sum+=bin2int(records[j]+cellOffset+1);
+											avgCount++;
+											//printf("end avgCount-%d\n", avgCount);
+											
+										}
+										rowNo=j-1;
+										float average=sum*1.0f/avgCount;
+										*(updatedRows[groupNo]+offset-1)=32;
+										//printf("exit\n");
+										printf("before index %d offset %d\n",rowNo, offset);
+										if(columnsInSelect[i]->functionType==AVG){
+											sprintf(updatedRows[groupNo] + offset, "%2f", average);
+											//printf("AVG(%s)\n\t---------\n\t", columnsInSelect[i]->columnName);								
+										}
+										else if(columnsInSelect[i]->functionType==SUM){
+											sprintf(updatedRows[groupNo] + offset, "%d", sum);
+											//printf("SUM(%s)\n\t---------\n\t", columnsInSelect[i]->columnName);
+										}
+										else if(columnsInSelect[i]->functionType==COUNT){
+											sprintf(updatedRows[groupNo] + offset, "%d", avgCount);
+											/*printf("COUNT(%s)\n\t---------\n\t", columnsInSelect[i]->columnName);
+											if(columnsInSelect[i]->columnName[0]=='*')
+												printf("%d\n", tfh->num_records);
+											else
+												printf("%d\n", avgCount);*/
+										}
+										printf("data written - %s\n",updatedRows[groupNo] + offset);
+										groupNo++;
 									}
+								}else{
+									groupNo=0;
+									int offset1 = getRowOffset(tab_entry,columnsInSelect[i]->columnIndex)+1;
+									for(int rowNo=0;rowNo<rowCount;rowNo++){
+										int sum=0;
+										int avgCount=0;
+										int j=0;
+
+										*(updatedRows[groupNo]+offset-1)=columnsInSelect[i]->columnLength;
+
+										//printf("before index %d offset %d offset1 %d groupNo %d\n",rowNo, offset, offset1, groupNo);
+										for(j=rowNo+1;groupNos[j]==groupNo && j<rowCount;j++);
+										rowNo=j-1;
+										//printf("index %d offset %d offset1 %d groupNo %d\n",rowNo, offset, offset1, groupNo);
+
+										printf("getting %d\n",bin2int(records[rowNo]+offset1));
+										printf("type-%d\n", (col_entry+columnsInSelect[i]->columnIndex)->col_type);
+										if((col_entry+columnsInSelect[i]->columnIndex)->col_type==T_CHAR)
+											sprintf(updatedRows[groupNo] + offset, "%s", records[rowNo]+offset1);
+										else{
+											//printCharArrInInt(records[rowNo]+offset1,4);
+											copyBytes(updatedRows[groupNo] + offset, records[rowNo]+offset1,4);
+											//printCharArrInInt(updatedRows[groupNo] + offset,4);
+											//memcpy(updatedRows[groupNo] + offset,records[rowNo]+offset1,4);
+										}
+										groupNo++;
+									}
+									printf("exit, group-%d\n",groupNo);
 								}
-								if(!columnExists){
-									rc=COLUMN_NOT_EXIST;
-									cur->tok_value = INVALID;
-									return rc;
-								}
-								row_obj** rows = (row_obj**)calloc(tfh->num_records,sizeof(row_obj*));
+								offset=offset+32;
+							}
+							cur=cur->next;
+						}else{
+							rc=INVALID_SYNTAX;
+							cur->tok_value = INVALID;
+							return rc;
+						}
+					}
+
+
+					if(cur->tok_value == K_ORDER){
+						cur=cur->next;
+						if(cur->tok_value == K_BY){
+							cur=cur->next;
+							col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+							int columnOffset=0;
+							int colType=0;
+							int columnIndex = columnExists(cur->tok_string,tab_entry);
+							if(columnIndex<0){
+								rc=COLUMN_NOT_EXIST;
+								cur->tok_value = INVALID;
+								return rc;
+							}
+							columnOffset=getRowOffset(tab_entry,columnIndex);
+							if(rows==NULL){
+								//printf("creating rows\n");
+								rows = (row_obj**)calloc(tfh->num_records,sizeof(row_obj*));
 								for(int i=0;i<tfh->num_records;i++){
-									rows[i] =  (row_obj*)calloc(tfh->num_records,sizeof(row_obj));
+									//printf("creating rows - %d\n", i);
+									rows[i] =  (row_obj*)calloc(1,sizeof(row_obj));
 									rows[i]->rowData=records[i];
 									rows[i]->offset=columnOffset;
 									rows[i]->dataType=colType;
 									if(rowsToPrint!=NULL)
 										rows[i]->shouldPrint=rowsToPrint[i];
 								}
-								std::sort(rows, rows+tfh->num_records, [](row_obj* a, row_obj* b)-> bool {
-									return a->lessThan(*b);
-								});
-								for(int i=0;i<tfh->num_records;i++){
-									records[i] = rows[i]->rowData;
-									rowsToPrint[i] = rows[i]->shouldPrint;
-									//printCharArrInInt(records[i], tfh->record_size);
-								}
-							}else{
-								rc=INVALID_SYNTAX;
-								cur->tok_value = INVALID;
-								return rc;
 							}
-						}else if(cur->tok_value != EOC){
+							std::sort(rows, rows+tfh->num_records, [](row_obj* a, row_obj* b)-> bool {
+								return a->lessThan(*b);
+							});
+							for(int i=0;i<tfh->num_records;i++){
+								//printf("saving rows - %d\n", i);
+								records[i] = rows[i]->rowData;
+								if(rowsToPrint!=NULL) rowsToPrint[i] = rows[i]->shouldPrint;
+								//printCharArrInInt(records[i], tfh->record_size);
+							}
+						}else{
 							rc=INVALID_SYNTAX;
 							cur->tok_value = INVALID;
 							return rc;
 						}
-						for(int i=0;i<columnCountInSelect;i++){
-							if(columnListToPrint[i]->functionType!=NONE){
-								//printf("[sem_select]func type - %d %d\n", columnListToPrint[i]->functionType, AVG);
-								int sum=0;
-								int avgCount=0;
-								int offset = getRowOffset(tab_entry,columnListToPrint[i]->columnIndex);
-								//printf("[sem_select]offset - %d\n", offset);
-								for(int j=0;j<tfh->num_records;j++){
-									int cellLen = *(records[j]+offset);
-									if(cellLen==0||(rowsToPrint!=NULL && !rowsToPrint[j])) continue;
-									sum+=bin2int(records[j]+offset+1);
-									avgCount++;
-								}
-								float average=sum*1.0f/avgCount;
-								printf("\n\t");
-								if(columnListToPrint[i]->functionType==AVG){
-									printf("AVG(%s)\n\t---------\n\t", columnListToPrint[i]->columnName);								
-									printf("%.2f\n", average);
-									return rc;
-								}
-								else if(columnListToPrint[i]->functionType==SUM){
-									printf("SUM(%s)\n\t---------\n\t", columnListToPrint[i]->columnName);
-									printf("%d\n", sum);
-									return rc;
-								}
-								else if(columnListToPrint[i]->functionType==COUNT){
-									printf("COUNT(%s)\n\t---------\n\t", columnsInSelect[i]->columnName);
-									if(columnsInSelect[i]->columnName[0]=='*')
-										printf("%d\n", tfh->num_records);
-									else
-										printf("%d\n", avgCount);
-									return rc;
-								}
-							}
-						}
-						printf("\n\t");
-						col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
-						for(int i = 0; i < columnCount; i++){
-							//printf("[sem_select] column detail %s\n", columnListToPrint[i]->columnName);
-							int len=(col_entry+columnListToPrint[i]->columnIndex)->col_len;
-							int index=columnListToPrint[i]->columnIndex;
-							//printf("\n<inside int cond %d, ind-%d>\n",(col_entry+index)->col_type, index);
-							if((col_entry+columnListToPrint[i]->columnIndex)->col_type==T_INT){
-								len=12;
-							}
-							if(len>strlen(columnListToPrint[i]->columnName)){
-								printf("%s", columnListToPrint[i]->columnName);
-								printf("% *s ", len-strlen(columnListToPrint[i]->columnName),"");
-							}else{
-								printf("%s ", columnListToPrint[i]->columnName);
-							}
-							//printf("(%d,%d)",col_entry->col_len,strlen(col_entry->col_name));
-						}
-						printf("\n\t");
-						col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
-						const char *pad = "---------------------------------------";
-
-						for(int i = 0; i < columnCount; i++){
-							//printf("[sem_select] printing ---\n");
-							int len=(col_entry+columnListToPrint[i]->columnIndex)->col_len;
-							if((col_entry+columnListToPrint[i]->columnIndex)->col_type==T_INT) len=12;
-							//printf("[sem_select] column len %d\n", len);
-							if(strlen(columnListToPrint[i]->columnName)>len)
-								printf("%.*s ", strlen(columnListToPrint[i]->columnName), pad);
-							else
-								printf("%.*s ", len, pad);
-						}
-						printf("\n\t");
-						int cellLen=0;
-						//int lenTillNow=0;
-						for(int i=0;i<tfh->num_records;i++){
-							col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
-							//lenTillNow=0;
-							if(rowsToPrint!=NULL && !rowsToPrint[i]) continue;
-							for(int j = 0; j < columnCount; j++){
-								int colIndex=columnListToPrint[j]->columnIndex;
-								int offset=columnListToPrint[j]->columnOffset;
-								int colNameLen=strlen(columnListToPrint[j]->columnName);
-								cellLen = records[i][offset];
-								//printf("[sel_select] column detail %d %d %d %s\n", colIndex, offset, cellLen==0, columnListToPrint[j]->columnName);
-								offset++;
-								if(cellLen==0){
-									int len=0;
-									if((col_entry+colIndex)->col_type==T_CHAR)len=colNameLen>(col_entry+colIndex)->col_len?colNameLen:(col_entry+colIndex)->col_len;
-									else len=12;
-									printf("% *s---% *s ",len/2-1,"",len/2-2,"");
-								}else{
-									char* cell = (char*)calloc(1, cellLen);
-									//memcpy(cell, records[i][lenTillNow], cellLen);
-									for(int k=0;k<cellLen;k++){
-										*(cell+k)=records[i][offset+k];
-									}
-									if((col_entry+colIndex)->col_type==T_CHAR)
-										if(colNameLen>(col_entry+colIndex)->col_len)
-											printf("%s% *s ", cell,colNameLen-strlen(cell), "");
-										else
-											printf("%s% *s ", cell, (col_entry+colIndex)->col_len-strlen(cell),"");
-											
-									else{
-										if(colNameLen>12)
-											printf("% *s%d ", colNameLen-strlen(cell), "", bin2int(cell));
-										else
-											printf("%12d ", bin2int(cell));
-									}
-								}
-							}
-							printf("\n\t");
-						}
-						
+					}else if(cur->tok_value != EOC){
+						rc=INVALID_SYNTAX;
+						cur->tok_value = INVALID;
+						return rc;
 					}
+					
+					printf("\n\t");
+					printColumnList(columnsInSelect, tab_entry, columnCountInSelect);
+					printf("\n\t");
+					printDashes(columnsInSelect, tab_entry, columnCountInSelect);
+					printf("\n\t");
+					int numRecords=tfh->num_records;
+					char** recordsToPrint=records;
+					if(updatedRows!=NULL){//grouping is done
+						numRecords=rowCount;
+						recordsToPrint=updatedRows;
+					}
+					printRowData(columnsInSelect, columnCountInSelect, numRecords, tab_entry, rowsToPrint, recordsToPrint);
+					
 				}
 			}
 		}
 	}
   return rc;
 }
+
+int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1, char** records2, table_file_header* tfh1, table_file_header* tfh2, select_attribute** columnsInSelect, int columnCount, char** outputRows){
+	cd_entry* col_entry1 = (cd_entry*)((char*)tab_entry1 + tab_entry1->cd_offset);
+	cd_entry* col_entry2 = (cd_entry*)((char*)tab_entry2 + tab_entry2->cd_offset);
+	int** commonIndices=(int**)calloc(10,sizeof(int*));
+	int commonColumnCount=0;
+	for(int i=0;i<tab_entry1->num_columns;i++){
+		for(int j=0;j<tab_entry2->num_columns;j++){
+			if(strcasecmp((col_entry1+i)->col_name, (col_entry2+j)->col_name)==0 && ((col_entry1+i)->col_type==(col_entry2+j)->col_type)){
+				commonIndices[commonColumnCount]=(int*)calloc(2,sizeof(int));
+				commonIndices[commonColumnCount][0]=i;
+				commonIndices[commonColumnCount][1]=j;
+				printf("common column %s, %s\n",(col_entry1+i)->col_name, (col_entry2+j)->col_name);
+				commonColumnCount++;
+			}
+		}
+	}
+	printf("common column count %d\n",commonColumnCount);
+	int outputRowCount=0;
+	for(int row1=0;row1<tfh1->num_records;row1++){
+		for(int row2=0;row2<tfh2->num_records;row2++){
+			bool allMatch=true;
+			for(int i=0;i<commonColumnCount;i++){
+				int row1CellOffset=getRowOffset(tab_entry1,commonIndices[i][0])+1;
+				int row2CellOffset=getRowOffset(tab_entry2,commonIndices[i][1])+1;
+				printf("data compare %s, %s\n",records1[row1]+row1CellOffset, records2[row2]+row2CellOffset);
+				if(strcmp(records1[row1]+row1CellOffset, records2[row2]+row2CellOffset)!=0){
+					allMatch=false;
+					break;
+				}
+			}
+			if(allMatch){
+				int offset=0;
+				outputRows[outputRowCount]=(char*)calloc(getRowLen(columnsInSelect,columnCount)+1*columnCount,sizeof(char));
+				printf("adding rows\n");
+				//printCharArr(records1[row1], 40);
+				//printCharArr(records2[row2], 40);
+				for(int c=0;c<columnCount;c++){
+					int rowOffset=columnsInSelect[c]->columnOffset+1;//getRowOffset(tab_entry1,columnsInSelect[c]->columnOffset)+1;
+					if(strcasecmp(columnsInSelect[c]->tableName,tab_entry1->table_name)==0){
+						*(outputRows[outputRowCount]+offset)=columnsInSelect[c]->columnLength;
+						offset++;
+						printf("t1 adding %s %d offset-%d length-%d\n",records1[row1]+rowOffset, bin2int(records1[row1]+rowOffset), rowOffset, *(outputRows[outputRowCount]+offset-1));
+						copyBytes(outputRows[outputRowCount]+offset, records1[row1]+rowOffset, columnsInSelect[c]->columnLength);
+						//printf("t1 adding %d\n", bin2int(outputRows[outputRowCount]+offset));
+						offset+=columnsInSelect[c]->columnLength;
+					}
+					else if(strcasecmp(columnsInSelect[c]->tableName,tab_entry2->table_name)==0){
+						*(outputRows[outputRowCount]+offset)=columnsInSelect[c]->columnLength;
+						offset++;
+						printf("t2 adding %s %d offset %d length-%d\n",records2[row2]+rowOffset,  bin2int(records2[row2]+rowOffset), rowOffset, *(outputRows[outputRowCount]+offset-1));
+						copyBytes(outputRows[outputRowCount]+offset, records2[row2]+rowOffset, columnsInSelect[c]->columnLength);
+						//printf("t2 adding %d\n",  bin2int(outputRows[outputRowCount]+offset));
+						offset+=columnsInSelect[c]->columnLength;
+					}else{
+						printf("t3 adding %s \n",columnsInSelect[c]->tableName);
+						*(outputRows[outputRowCount]+offset)=0;
+						offset+=columnsInSelect[c]->columnLength+1;
+					}
+					//columnsInSelect[c]->columnLength=32;
+				}
+				printCharArrInInt(outputRows[outputRowCount],getRowLen(columnsInSelect,columnCount)+1*columnCount);
+				outputRowCount++;
+			}
+		}
+	}
+	for(int c=0;c<columnCount;c++){
+		columnsInSelect[c]->columnLength=32;
+	}
+
+	return outputRowCount;
+}
+
+char** getTableData(tpd_entry* tab_entry, table_file_header* tfh){
+	char* tname=(char*)calloc(1, MAX_TOK_LEN);
+	memcpy(tname, tab_entry->table_name, MAX_TOK_LEN);
+	strcat(tname, ".tab");
+	FILE *fhandle = NULL;
+	if((fhandle = fopen(tname, "rbc")) == NULL)
+	{
+		return NULL;
+	}
+	struct stat file_stat;
+	fread(tfh, sizeof(table_file_header), 1, fhandle);
+	fstat(fileno(fhandle), &file_stat);
+	char* filedata = (char*)calloc(1, file_stat.st_size);
+
+	if(IS_DEBUG) printf("num records - %d\nrecord length - %d\n",tfh->num_records, tfh->record_size);
+
+	fread(filedata, file_stat.st_size, 1, fhandle);
+
+	fflush(fhandle);
+	fclose(fhandle);
+
+	char** records=(char**) calloc(tfh->num_records, sizeof(char*));
+	for (int i = 0; i < tfh->num_records; i++ ){
+		records[i] = (char*) calloc(tfh->record_size, sizeof(char));
+	}
+
+
+	for(int i=0;i<tfh->num_records;i++){
+		if(IS_DEBUG) printf("[sem_select] record size - %d\n", tfh->record_size);
+		memcpy(records[i], filedata+i*tfh->record_size, tfh->record_size);
+	}
+	return records;
+}
+
+void printRowData(select_attribute** columnsInSelect, int columnCountInSelect, int rowCount, tpd_entry* tab_entry, bool* rowsToPrint, char** records){
+	
+	//int lenTillNow=0;
+	for(int i=0;i<rowCount;i++){
+		//lenTillNow=0;
+		if(rowsToPrint!=NULL && !rowsToPrint[i]) continue;
+		printCells(columnsInSelect, columnCountInSelect, i, tab_entry, records);
+		printf("\n\t");
+	}
+}
+
+void printCells(select_attribute** columnsInSelect, int columnCountInSelect, int rowNo, tpd_entry* tab_entry, char** records){
+	cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+	for(int j = 0; j < columnCountInSelect; j++){
+
+		if(columnsInSelect[j]->arr!=NULL){
+			printCells(columnsInSelect[j]->arr, tab_entry->num_columns, rowNo, tab_entry, records);
+			continue;
+		}
+		int colIndex=columnsInSelect[j]->columnIndex;
+		int offset=columnsInSelect[j]->columnOffset;
+		int colNameLen=strlen(columnsInSelect[j]->columnName);
+		int cellLen = records[rowNo][offset];
+		printf("[sel_select] column detail %d %d %d %s\n", colIndex, offset, cellLen==0, columnsInSelect[j]->columnName);
+		//printCharArrInInt(records[rowNo]+offset,5);
+		offset++;
+		if(cellLen==0){
+			int len=0;
+			if((col_entry+colIndex)->col_type==T_CHAR)len=colNameLen>(col_entry+colIndex)->col_len?colNameLen:(col_entry+colIndex)->col_len;
+			else len=12;
+			printf("% *s---% *s ",len/2-1,"",len/2-2,"");
+		}else{
+			char* cell = (char*)calloc(1, cellLen);
+			//memcpy(cell, records[i][lenTillNow], cellLen);
+			for(int k=0;k<cellLen;k++){
+				*(cell+k)=records[rowNo][offset+k];
+			}
+			if((col_entry+colIndex)->col_type==T_CHAR || columnsInSelect[j]->functionType!=NONE)
+				if(colNameLen>(col_entry+colIndex)->col_len)
+					printf("%s% *s ", cell,colNameLen-strlen(cell), "");
+				else
+					printf("%s% *s ", cell, (col_entry+colIndex)->col_len-strlen(cell),"");
+					
+			else if((col_entry+colIndex)->col_type==T_INT){
+				if(colNameLen>12)
+					printf("% *s%d ", colNameLen-strlen(cell), "", bin2int(cell));
+				else
+					printf("%12d ", bin2int(cell));
+			}else{
+
+			}
+		}
+	}
+}
+
+
+void printColumnList(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect){
+	cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+	for(int i = 0; i < columnCountInSelect; i++){
+		//printf("[sem_select] column detail %s\n", columnsInSelect[i]->columnName);
+		int len=(col_entry+columnsInSelect[i]->columnIndex)->col_len;
+		int index=columnsInSelect[i]->columnIndex;
+		//printf("[printColumnList] %d %s\n", i, columnsInSelect[i]->columnName);
+		if(columnsInSelect[i]->arr!=NULL){
+			printColumnList(columnsInSelect[i]->arr, tab_entry, tab_entry->num_columns);
+			continue;
+		}
+		//printf("\n<inside int cond %d, ind-%d>\n",(col_entry+index)->col_type, index);
+		if((col_entry+columnsInSelect[i]->columnIndex)->col_type==T_INT){
+			len=12;
+		}
+
+		char* columName=columnsInSelect[i]->columnName;
+		if(columnsInSelect[i]->concatenatedName!=NULL){
+			columName=columnsInSelect[i]->concatenatedName;
+		}
+		if(len>strlen(columName)){
+			printf("%s", columName);
+			printf("% *s ", len-strlen(columName),"");
+		}else{
+			printf("%s ", columName);
+		}
+		//printf("(%d,%d)",col_entry->col_len,strlen(col_entry->col_name));
+	}
+}
+
+void printDashes(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect){
+	cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+	const char *pad = "---------------------------------------";
+
+	for(int i = 0; i < columnCountInSelect; i++){
+		//printf("[sem_select] printing ---\n");
+		if(columnsInSelect[i]->arr!=NULL){
+			printDashes(columnsInSelect[i]->arr, tab_entry, tab_entry->num_columns);
+			continue;
+		}
+		int len=(col_entry+columnsInSelect[i]->columnIndex)->col_len;
+		if((col_entry+columnsInSelect[i]->columnIndex)->col_type==T_INT) len=12;
+		//printf("[sem_select] column len %d\n", len);
+		if(strlen(columnsInSelect[i]->columnName)>len)
+			printf("%.*s ", strlen(columnsInSelect[i]->columnName), pad);
+		else
+			printf("%.*s ", len, pad);
+	}
+}
+
 
 int sem_delete_from(token_list *t_list)
 {
@@ -1605,15 +1874,15 @@ int sem_update(token_list *t_list)
 			}
 			numRowsUpdated=0;
 			for(int u=0;u<count;u++){
-				printf("u-%d %d\n",u, columnListToUpdate[u]==NULL);
+				//printf("u-%d %d\n",u, columnListToUpdate[u]==NULL);
 				int offset=getRowOffset(tab_entry, columnListToUpdate[u]->columnIndex);
 				for(int i=0;i<tfh->num_records;i++){
 					if(rowsToUpdate==NULL || rowsToUpdate[i]){
-						printf("columnListToUpdate[u]->columnIndex-%d\n",columnListToUpdate[u]->columnIndex);
+						//printf("columnListToUpdate[u]->columnIndex-%d\n",columnListToUpdate[u]->columnIndex);
 						numRowsUpdated++;
-						printf("numRowsUpdated-%d\n",numRowsUpdated);
+						//printf("numRowsUpdated-%d\n",numRowsUpdated);
 						int cellLen=*(records[i]+offset);
-						printf("cellLen-%d\n",cellLen);
+						//printf("cellLen-%d\n",cellLen);
 						col_entry=(cd_entry*)((char*)tab_entry + tab_entry->cd_offset)+columnListToUpdate[u]->columnIndex;
 						if(columnListToUpdate[u]->newValue==NULL){
 							*(records[i]+offset)=0;
@@ -1629,7 +1898,7 @@ int sem_update(token_list *t_list)
 							*(records[i] + offset + 1 + 0) = n & 0xFF;
 						}else{
 							*(records[i]+offset)=col_entry->col_len;
-							memcpy(records + offset + 1, columnListToUpdate[u]->newValue,cellLen);
+							copyBytes(records[i] + offset + 1, columnListToUpdate[u]->newValue,cellLen);
 						}
 						//printf("cellLen-%d\n",cellLen);
 					}
@@ -1668,6 +1937,31 @@ int bin2int(char* num){
 	//printCharArrInInt(num,4);
     memcpy(&intVal, num, sizeof(int));
 	return intVal;
+}
+
+void copyIntToCharArray(char* arr, int val){
+	*(arr + 3) = (val >> 24) & 0xFF;
+	*(arr + 2) = (val >> 16) & 0xFF;
+	*(arr + 1) = (val >> 8) & 0xFF;
+	*(arr + 0) = val & 0xFF;
+}
+
+int columnExists(char* name, tpd_entry* tab_entry){
+	cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+	for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
+		if(strcmp(toLower(name), toLower(col_entry->col_name))==0){
+			return i;
+		}
+	}
+	return -1;
+}
+
+int getRowLen(select_attribute** columnList, int colLen){
+	int len=0;
+	for(int i=0;i<colLen;i++){
+		len=len+columnList[i]->columnLength;
+	}
+	return len;
 }
 
 int getColumnList(token_list* cur, select_attribute** columnList){
@@ -1719,8 +2013,9 @@ int getColumnList(token_list* cur, select_attribute** columnList){
 
 int checkAggregate(aggregate_type aggType, token_list* cur, select_attribute* attr){
 	attr->functionType=aggType;
+	token_list* tempToken=cur;
 	cur=cur->next;
-	//printf("[checkAggregate] %d\n",cur->tok_value);
+	printf("[checkAggregate] %d\n",cur->tok_value);
 	if(cur->tok_value==S_LEFT_PAREN ){
 		cur=cur->next;
 		if(cur->tok_value==T_CHAR || cur->tok_value==IDENT || cur->tok_value==S_STAR){
@@ -1738,6 +2033,11 @@ int checkAggregate(aggregate_type aggType, token_list* cur, select_attribute* at
 		cur->tok_value = INVALID;
 		return INVALID_SELECT_SECTION;
 	}
+	attr->concatenatedName = (char*)calloc(40, sizeof(char));
+	strcpy(attr->concatenatedName, tempToken->tok_string);
+	strcat(attr->concatenatedName, tempToken->next->tok_string);
+	strcat(attr->concatenatedName, tempToken->next->next->tok_string);
+	strcat(attr->concatenatedName, tempToken->next->next->next->tok_string);
 	return 0;
 }
 
@@ -1845,17 +2145,20 @@ bool* filterRows(char** records, tpd_entry *tab_entry, condition* conditionList,
 	return filters;
 }
 
-int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters){
+int filterColumns_bk(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters){
 	cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 	int attributeNo=0;
 	for(int att=0;att<attributeCount;att++){
 		if(strlen(attributes[att]->columnName)==1 && attributes[att]->columnName[0]=='*'){
+			attributes[att]->columnLength=4;//if there is * in select clause, its output for aggregates can only be an integer
 			cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
-				filters[attributeNo]=(select_attribute*)calloc(100, sizeof(select_attribute));
+				filters[attributeNo]=(select_attribute*)calloc(1, sizeof(select_attribute));
 				filters[attributeNo]->columnIndex=i;
 				filters[attributeNo]->columnOffset=getRowOffset(tab_entry, i);
 				filters[attributeNo]->functionType = attributes[att]->functionType;
+				cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+				filters[attributeNo]->columnLength = col_entry[i].col_len;
 				memcpy(filters[attributeNo]->columnName,col_entry->col_name, strlen(col_entry->col_name));
 				//printf("[filterColumns] %s %d, offset-%d\n", filters[attributeNo]->columnName, filters[attributeNo]->columnIndex, filters[attributeNo]->columnOffset);
 				attributeNo++;
@@ -1866,10 +2169,18 @@ int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *
 			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
 				//printf("[filterColumns] %s %s\n", col_entry->col_name, attributes[att]->columnName);
 				if(strcmp(toLower(col_entry->col_name),toLower(attributes[att]->columnName))==0){
-					filters[attributeNo]=(select_attribute*)calloc(100, sizeof(select_attribute));
+					filters[attributeNo]=(select_attribute*)calloc(1, sizeof(select_attribute));
 					filters[attributeNo]->columnIndex=i;
 					filters[attributeNo]->columnOffset=getRowOffset(tab_entry, i);
 					filters[attributeNo]->functionType = attributes[att]->functionType;
+					cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+					filters[attributeNo]->columnLength = col_entry[i].col_len;
+					attributes[att]->columnLength=col_entry[i].col_len;
+					attributes[att]->columnOffset=filters[attributeNo]->columnOffset;
+					attributes[att]->columnIndex=i;
+					if((attributes[att]->functionType==SUM||attributes[att]->functionType==AVG)&&col_entry->col_type==T_CHAR){
+						return INVALID_AGGREGATE_FUNCTION;
+					}
 					memcpy(filters[attributeNo]->columnName,col_entry->col_name, strlen(col_entry->col_name));
 					foundColumn=true;
 					attributeNo++;
@@ -1877,7 +2188,7 @@ int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *
 				}
 			}
 			if(!foundColumn)
-				return -1;
+				return COLUMN_NOT_EXIST;
 			
 		}
 
@@ -1886,6 +2197,59 @@ int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *
 	}
 	return attributeNo;
 }
+
+int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry){
+	cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+	int attributeNo=0;
+	for(int att=0;att<attributeCount;att++){
+		//printf("[filterColumns] %s \n",attributes[att]->columnName);
+		if(strlen(attributes[att]->columnName)==1 && attributes[att]->columnName[0]=='*'){
+			attributes[att]->columnLength=4;//if there is * in select clause, its output for aggregates can only be an integer
+			cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+			select_attribute** filters = (select_attribute**)calloc(100, sizeof(select_attribute*));
+			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
+				filters[i]=(select_attribute*)calloc(1, sizeof(select_attribute));
+				filters[i]->columnIndex=i;
+				filters[i]->columnOffset=getRowOffset(tab_entry, i);
+				filters[i]->functionType = attributes[att]->functionType;
+				cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+				filters[i]->columnLength = col_entry[i].col_len;
+				memcpy(filters[i]->columnName,col_entry[i].col_name, strlen(col_entry->col_name));
+				memcpy(filters[i]->tableName,tab_entry->table_name, strlen(tab_entry->table_name));				
+				//printf("[filterColumns] %s %d, offset-%d\n", filters[attributeNo]->columnName, filters[attributeNo]->columnIndex, filters[attributeNo]->columnOffset);
+			}
+			attributes[att]->arr=filters;
+		} else {
+			cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+			bool foundColumn=false;
+			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
+				printf("[filterColumns] %s %s\n", col_entry->col_name, attributes[att]->columnName);
+				if(strcmp(toLower(col_entry->col_name),toLower(attributes[att]->columnName))==0){
+					//cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+					attributes[att]->columnLength=col_entry->col_len;
+					attributes[att]->columnOffset=getRowOffset(tab_entry, i);
+					attributes[att]->columnIndex=i;
+					memcpy(attributes[att]->tableName,tab_entry->table_name, strlen(tab_entry->table_name));				
+					//printf("%s %d aggregate func - %d\n", col_entry->col_name, col_entry->col_type, attributes[att]->functionType);
+					if((attributes[att]->functionType==SUM||attributes[att]->functionType==AVG)&&col_entry->col_type==T_CHAR){
+						return INVALID_AGGREGATE_FUNCTION;
+					}
+					foundColumn=true;
+					break;
+				}
+			}
+			// if(!foundColumn)
+			// 	return COLUMN_NOT_EXIST;
+			
+		}
+
+		
+
+	}
+	//printf("[filterColumns] complete\n");
+	return 0;
+}
+
 
 int getRowOffset(tpd_entry *tab_entry, int colNo){
 	cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
@@ -2089,7 +2453,9 @@ void printCharArr(char arr[], int size){
 	for(int i=0;i<size;i++)
 	{
 		printf("(%d)%c",i, arr[i]);
+		//printf("%c", arr[i]);
 	}
+	printf("\n<end>\n");
 }
 
 void printCharArrInInt(char arr[], int size){
@@ -2104,8 +2470,8 @@ void printCharArrInInt(char arr[], int size){
 
 void copyBytes(char* from, char to[], int noOfBytes){
 	for(int i=0;i<noOfBytes;i++){
-		//printf("copying - %d - %d\n",*(from+i), to[i]);
 		*(from+i)=to[i];
+		//printf("copying - %d\n",*(from+i));
 	}
 	if(IS_DEBUG) printf("copy - %s\n",from);
 }

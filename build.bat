@@ -14,3 +14,9 @@ CALL a "insert into class values ('euna', 'F', 460, 75, 535)"
 CALL a "insert into class values ('Victor', 'M', 475, 60, 535)"
 CALL a "insert into class values ('Linawati', 'F', 490, 86, 576)"
 CALL a "insert into class values ('Stephen', 'M', 520, 76, 596)"
+
+
+CALL a "insert into coursesReg values ('Siu', 'maths')"
+CALL a "insert into coursesReg values ('Frank', 'chem')"
+CALL a "insert into coursesReg values ('Jordon', 'bio')"
+CALL a "insert into coursesReg values ('Jeff', 'phy')"

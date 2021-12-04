@@ -1144,7 +1144,7 @@ int sem_select(token_list *t_list)
 	cur = t_list;
 	columnsInSelect = (select_attribute**)calloc(100,sizeof(select_attribute*));
 	columnCountInSelect = getColumnList(cur, columnsInSelect); 
-	printf("[sem_select] columnCountInSelect - %d\n", columnCountInSelect);
+	//printf("[sem_select] columnCountInSelect - %d\n", columnCountInSelect);
 	if(columnCountInSelect<0){
 		rc = columnCountInSelect;
 	}
@@ -1159,7 +1159,7 @@ int sem_select(token_list *t_list)
 		}
 		else
 		{
-			printf("[sem_select] reading tpd file\n");
+			//printf("[sem_select] reading tpd file\n");
 			cur = cur->next;
 			if ((tab_entry = get_tpd_from_list(cur->tok_string)) == NULL)
 			{
@@ -1172,7 +1172,7 @@ int sem_select(token_list *t_list)
 				//columnListToPrint = (select_attribute**)calloc(100, sizeof(select_attribute*));
 				//int columnCount = filterColumns(columnsInSelect,columnCountInSelect,tab_entry, columnListToPrint);
 				int columnObjUpdated = filterColumns(columnsInSelect,columnCountInSelect,tab_entry);
-				printf("[sem_select] columnCount - %d\n", columnObjUpdated);
+				//printf("[sem_select] columnCount - %d\n", columnObjUpdated);
 				
 				if(columnObjUpdated<0){
 					rc = columnObjUpdated;
@@ -1213,7 +1213,7 @@ int sem_select(token_list *t_list)
 							cur=cur->next;
 						}
 					}
-					printf("checkpt\n");
+					//printf("checkpt\n");
 
 					if(cur->tok_value == K_NATURAL){
 						cur=cur->next;
@@ -1241,6 +1241,10 @@ int sem_select(token_list *t_list)
 									cur->tok_value = INVALID;
 									return rc;									
 								}
+							}else{
+								rc=INVALID_TABLE_NAME;
+								cur->tok_value = INVALID;
+								return rc;
 							}
 							cur=cur->next;
 						}else{
@@ -1293,7 +1297,7 @@ int sem_select(token_list *t_list)
 							}
 							rowCount=groupNo+1;
 							updatedRows = (char**)calloc(rowCount,sizeof(char*));
-							printf("creating pointer-%d\n", rowCount);
+							//printf("creating pointer-%d\n", rowCount);
 							//int newRowLen = getRowLen(columnsInSelect, columnCount);
 							int newRowLen = columnCountInSelect + columnCountInSelect*32;//getRowLen(columnsInSelect, columnCount);
 							//SELECT COUNT(CustomerID) FROM Customers GROUP BY Country;
@@ -1302,10 +1306,10 @@ int sem_select(token_list *t_list)
 							groupNo=0;
 							for(int i=0;i<rowCount;i++){
 								updatedRows[i]=(char*)calloc(newRowLen,sizeof(char));
-								printf("creating memory-%d, i %d\n", newRowLen, i);
+								//printf("creating memory-%d, i %d\n", newRowLen, i);
 							}
 							for(int i=0;i<columnCountInSelect;i++){
-								printf("column no. -%d, offset-%d\n", i, columnsInSelect[i]->columnOffset);
+								//printf("column no. -%d, offset-%d\n", i, columnsInSelect[i]->columnOffset);
 								columnsInSelect[i]->columnLength=32;
 								columnsInSelect[i]->columnOffset=offset;
 								offset++;
@@ -1318,10 +1322,14 @@ int sem_select(token_list *t_list)
 										int sum=bin2int(records[rowNo]+cellOffset+1);
 										int avgCount=1;
 										int j;
-										printf("aggregate rowNo-%d, sum - %d\n", rowNo, sum);
+										bool isNull=false;
+										//printf("aggregate rowNo-%d, sum - %d\n", rowNo, sum);
 										for(j=rowNo+1;j<tfh->num_records && groupNos[j]==groupNo;j++){
-											printf("sum-%d\n", bin2int(records[j]+cellOffset+1));
+											//printf("sum-%d\n", bin2int(records[j]+cellOffset+1));
 											int cellLen = *(records[j]+cellOffset);
+											if(cellLen==0){
+												isNull=true;
+											}
 											if(cellLen==0||(rowsToPrint!=NULL && !rowsToPrint[j])) continue;
 											sum+=bin2int(records[j]+cellOffset+1);
 											avgCount++;
@@ -1329,10 +1337,13 @@ int sem_select(token_list *t_list)
 											
 										}
 										rowNo=j-1;
+										if(isNull)
+											*(updatedRows[groupNo]+offset-1)=0;
+										else
+											*(updatedRows[groupNo]+offset-1)=32;
 										float average=sum*1.0f/avgCount;
-										*(updatedRows[groupNo]+offset-1)=32;
 										//printf("exit\n");
-										printf("before index %d offset %d\n",rowNo, offset);
+										//printf("before index %d offset %d\n",rowNo, offset);
 										if(columnsInSelect[i]->functionType==AVG){
 											sprintf(updatedRows[groupNo] + offset, "%2f", average);
 											//printf("AVG(%s)\n\t---------\n\t", columnsInSelect[i]->columnName);								
@@ -1349,7 +1360,7 @@ int sem_select(token_list *t_list)
 											else
 												printf("%d\n", avgCount);*/
 										}
-										printf("data written - %s\n",updatedRows[groupNo] + offset);
+										//printf("data written - %s\n",updatedRows[groupNo] + offset);
 										groupNo++;
 									}
 								}else{
@@ -1470,7 +1481,7 @@ int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1,
 				commonIndices[commonColumnCount]=(int*)calloc(2,sizeof(int));
 				commonIndices[commonColumnCount][0]=i;
 				commonIndices[commonColumnCount][1]=j;
-				printf("common column %s, %s\n",(col_entry1+i)->col_name, (col_entry2+j)->col_name);
+				//printf("common column %s, %s\n",(col_entry1+i)->col_name, (col_entry2+j)->col_name);
 				commonColumnCount++;
 			}
 		}
@@ -1483,7 +1494,7 @@ int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1,
 			for(int i=0;i<commonColumnCount;i++){
 				int row1CellOffset=getRowOffset(tab_entry1,commonIndices[i][0])+1;
 				int row2CellOffset=getRowOffset(tab_entry2,commonIndices[i][1])+1;
-				printf("data compare %s, %s\n",records1[row1]+row1CellOffset, records2[row2]+row2CellOffset);
+				//printf("data compare %s, %s\n",records1[row1]+row1CellOffset, records2[row2]+row2CellOffset);
 				if(strcmp(records1[row1]+row1CellOffset, records2[row2]+row2CellOffset)!=0){
 					allMatch=false;
 					break;
@@ -1492,15 +1503,16 @@ int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1,
 			if(allMatch){
 				int offset=0;
 				outputRows[outputRowCount]=(char*)calloc(getRowLen(columnsInSelect,columnCount)+1*columnCount,sizeof(char));
-				printf("adding rows\n");
+				printf("size per row - %d + %d\n", getRowLen(columnsInSelect,columnCount),1*columnCount);
 				//printCharArr(records1[row1], 40);
 				//printCharArr(records2[row2], 40);
 				for(int c=0;c<columnCount;c++){
 					int rowOffset=columnsInSelect[c]->columnOffset+1;//getRowOffset(tab_entry1,columnsInSelect[c]->columnOffset)+1;
+					//printf("table name %s \n",columnsInSelect[c]->tableName);
 					if(strcasecmp(columnsInSelect[c]->tableName,tab_entry1->table_name)==0){
 						*(outputRows[outputRowCount]+offset)=columnsInSelect[c]->columnLength;
 						offset++;
-						printf("t1 adding %s %d offset-%d length-%d\n",records1[row1]+rowOffset, bin2int(records1[row1]+rowOffset), rowOffset, *(outputRows[outputRowCount]+offset-1));
+						//printf("[getJoinedData] t1 adding % 20s % 10d offset-%d length-%d\n",records1[row1]+rowOffset, bin2int(records1[row1]+rowOffset), offset, *(outputRows[outputRowCount]+offset-1));
 						copyBytes(outputRows[outputRowCount]+offset, records1[row1]+rowOffset, columnsInSelect[c]->columnLength);
 						//printf("t1 adding %d\n", bin2int(outputRows[outputRowCount]+offset));
 						offset+=columnsInSelect[c]->columnLength;
@@ -1508,12 +1520,12 @@ int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1,
 					else if(strcasecmp(columnsInSelect[c]->tableName,tab_entry2->table_name)==0){
 						*(outputRows[outputRowCount]+offset)=columnsInSelect[c]->columnLength;
 						offset++;
-						printf("t2 adding %s %d offset %d length-%d\n",records2[row2]+rowOffset,  bin2int(records2[row2]+rowOffset), rowOffset, *(outputRows[outputRowCount]+offset-1));
+						//printf("[getJoinedData] t2 adding % 20s % 10d offset %d length-%d\n",records2[row2]+rowOffset,  bin2int(records2[row2]+rowOffset), offset, *(outputRows[outputRowCount]+offset-1));
 						copyBytes(outputRows[outputRowCount]+offset, records2[row2]+rowOffset, columnsInSelect[c]->columnLength);
 						//printf("t2 adding %d\n",  bin2int(outputRows[outputRowCount]+offset));
 						offset+=columnsInSelect[c]->columnLength;
 					}else{
-						printf("t3 adding %s \n",columnsInSelect[c]->tableName);
+						//printf("t3 adding %s \n",columnsInSelect[c]->tableName);
 						*(outputRows[outputRowCount]+offset)=0;
 						offset+=columnsInSelect[c]->columnLength+1;
 					}
@@ -1524,8 +1536,11 @@ int getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1,
 			}
 		}
 	}
+	int bytesCount=0;
 	for(int c=0;c<columnCount;c++){
-		columnsInSelect[c]->columnLength=32;
+		//columnsInSelect[c]->columnLength=32;
+		columnsInSelect[c]->columnOffset=bytesCount;
+		bytesCount+=columnsInSelect[c]->columnLength+1;
 	}
 
 	return outputRowCount;
@@ -1588,7 +1603,7 @@ void printCells(select_attribute** columnsInSelect, int columnCountInSelect, int
 		int offset=columnsInSelect[j]->columnOffset;
 		int colNameLen=strlen(columnsInSelect[j]->columnName);
 		int cellLen = records[rowNo][offset];
-		printf("[sel_select] column detail %d %d %d %s\n", colIndex, offset, cellLen==0, columnsInSelect[j]->columnName);
+		//printf("\n[sel_select] column detail %d %d %d %s\n", colIndex, offset, cellLen==0, columnsInSelect[j]->columnName);
 		//printCharArrInInt(records[rowNo]+offset,5);
 		offset++;
 		if(cellLen==0){
@@ -2205,7 +2220,7 @@ int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *
 		//printf("[filterColumns] %s \n",attributes[att]->columnName);
 		if(strlen(attributes[att]->columnName)==1 && attributes[att]->columnName[0]=='*'){
 			attributes[att]->columnLength=4;//if there is * in select clause, its output for aggregates can only be an integer
-			cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+			col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 			select_attribute** filters = (select_attribute**)calloc(100, sizeof(select_attribute*));
 			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
 				filters[i]=(select_attribute*)calloc(1, sizeof(select_attribute));
@@ -2220,16 +2235,17 @@ int filterColumns(select_attribute** attributes, int attributeCount, tpd_entry *
 			}
 			attributes[att]->arr=filters;
 		} else {
-			cd_entry* col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
+			col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 			bool foundColumn=false;
 			for(int i = 0; i < tab_entry->num_columns; i++, col_entry++){
-				printf("[filterColumns] %s %s\n", col_entry->col_name, attributes[att]->columnName);
+				//printf("[filterColumns] %s %s\n", col_entry->col_name, attributes[att]->columnName);
 				if(strcmp(toLower(col_entry->col_name),toLower(attributes[att]->columnName))==0){
 					//cd_entry  *col_entry = (cd_entry*)((char*)tab_entry + tab_entry->cd_offset);
 					attributes[att]->columnLength=col_entry->col_len;
 					attributes[att]->columnOffset=getRowOffset(tab_entry, i);
 					attributes[att]->columnIndex=i;
 					memcpy(attributes[att]->tableName,tab_entry->table_name, strlen(tab_entry->table_name));				
+					printf("[filterColumns] - tablename %s, col_len %d\n", tab_entry->table_name, col_entry->col_len);
 					//printf("%s %d aggregate func - %d\n", col_entry->col_name, col_entry->col_type, attributes[att]->functionType);
 					if((attributes[att]->functionType==SUM||attributes[att]->functionType==AVG)&&col_entry->col_type==T_CHAR){
 						return INVALID_AGGREGATE_FUNCTION;

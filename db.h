@@ -126,7 +126,7 @@ typedef enum t_value
 } token_value;
 
 /* This constants must be updated when add new keywords */
-#define TOTAL_KEYWORDS_PLUS_TYPE_NAMES 32
+#define TOTAL_KEYWORDS_PLUS_TYPE_NAMES 33
 
 /* New keyword must be added in the same position/order as the enum
    definition above, otherwise the lookup will be wrong */
@@ -218,6 +218,7 @@ typedef enum aggregate_type_def
 
 struct condition{
 	int colNo;
+	char tableName[32];
 	condition_type type;
 	int keywordLen;
 	int nextBinaryOperator;

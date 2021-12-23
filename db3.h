@@ -268,8 +268,8 @@ int 				sem_update(token_list *t_list);
 int 				filterColumns_bk(select_attribute** attributes, int attributeCount, tpd_entry *tab_entry, select_attribute** filters);
 void 				printDashes(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect);
 void 				printColumnList(select_attribute** columnsInSelect, tpd_entry* tab_entry, int columnCountInSelect);
-void 				printCells(select_attribute** columnsInSelect, int columnCountInSelect, int rowNo, tpd_entry* tab_entry, char** records);
-void 				printRowData(select_attribute** columnsInSelect, int columnCountInSelect, int rowCount, tpd_entry* tab_entry, bool* rowsToPrint, char** records);
+void 				printCells(select_attribute** columnsInSelect, int columnCountInSelect, int rowNo, tpd_entry* tab_entry, tpd_entry* tab_entry1, char** records);
+void 				printRowData(select_attribute** columnsInSelect, int columnCountInSelect, int rowCount, tpd_entry* tab_entry, tpd_entry* tab_entry1, bool* rowsToPrint, char** records);
 char** 				getTableData(tpd_entry* tab_entry, table_file_header* tfh);
 int 				getJoinedData(tpd_entry* tab_entry1, tpd_entry* tab_entry2, char** records1, char** records2, table_file_header* tfh1, table_file_header* tfh2, select_attribute** columnsInSelect, int columnCount, char** outputRows, bool** rowsToPrint);
 void				handleGroupBy(char** updatedRows, char** records, tpd_entry* tab_entry, select_attribute** columnsInSelect, int columnCountInSelect, bool** rowsToPrint, int* groupNos, int rowCount, int newRowLen, table_file_header* tfh);
@@ -292,7 +292,6 @@ int 				columnExists(char* name, tpd_entry* tab_entry);
 int 				getRowLen(select_attribute** columnList, int colLen);
 void 				copyIntToCharArray(char* arr, int val);
 
-
 struct row_obj{
 	char* rowData;
 	int offset;
@@ -314,3 +313,5 @@ struct row_obj{
 		}
 	}
 };
+void sort1(row_obj** arr, int l, int r);
+void merge(row_obj** arr, int l, int m, int r);

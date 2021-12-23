@@ -15,8 +15,10 @@ CALL a "insert into class values ('Victor', 'M', 475, 60, 535)"
 CALL a "insert into class values ('Linawati', 'F', 490, 86, 576)"
 CALL a "insert into class values ('Stephen', 'M', 520, 76, 596)"
 
-
+CALL a "create table coursesReg ( Student char(12) NOT NULL, course char(15))"
 CALL a "insert into coursesReg values ('Siu', 'maths')"
 CALL a "insert into coursesReg values ('Frank', 'chem')"
 CALL a "insert into coursesReg values ('Jordon', 'bio')"
 CALL a "insert into coursesReg values ('Jeff', 'phy')"
+
+CALL a "select student, course, gender from class natural join coursesReg"
